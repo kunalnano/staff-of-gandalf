@@ -1,0 +1,213 @@
+# {{ title }}
+
+> *"{{ opening_quote }}"*
+
+---
+
+## Assessment Overview
+
+| Attribute | Value |
+|-----------|-------|
+| **Target** | `{{ target }}` |
+| **Date** | {{ timestamp }} |
+| **Timing Mode** | {{ timing_mode }} |
+| **Hosts Discovered** | {{ total_hosts }} |
+| **Open Ports** | {{ total_open_ports }} |
+| **Total Findings** | {{ total_findings }} |
+
+### Finding Summary
+
+| Severity | Count |
+|----------|-------|
+| 🔴 Critical | {{ critical_count }} |
+| 🟡 Warning | {{ warning_count }} |
+| 🟢 Info | {{ info_count }} |
+
+---
+
+## Lay of the Land
+
+*The Grey Pilgrim surveys the network topology...*
+
+{% if hosts %}
+### Discovered Hosts
+
+| IP Address | Hostname | Status | MAC Address |
+|------------|----------|--------|-------------|
+{% for host in hosts %}
+| {{ host.ip_address }} | {{ host.hostname or '-' }} | {{ '✓ Up' if host.status == 'up' else '✗ Down' }} | {{ host.mac_address or '-' }} |
+{% endfor %}
+
+{% else %}
+*No host discovery results available.*
+{% endif %}
+
+---
+
+## Open Gates
+
+*There are many doors in this realm, and some should remain shut...*
+
+{% if ports_by_host %}
+{% for host, ports in ports_by_host.items() %}
+### {{ host }}
+
+| Port | Protocol | State | Service | Version |
+|------|----------|-------|---------|---------|
+{% for port in ports %}
+{% if port.state == 'open' %}
+| {{ port.port }} | {{ port.protocol }} | {{ port.state }} | {{ port.service or 'unknown' }} | {{ port.version or '-' }} |
+{% endif %}
+{% endfor %}
+
+{% endfor %}
+{% else %}
+*No port scan results available.*
+{% endif %}
+
+---
+
+## Shadows and Flames
+
+*The Grey Pilgrim identifies threats lurking in the darkness...*
+
+{% if critical_findings %}
+### 🔴 Critical Findings
+
+**Fly, you fools! These require immediate attention.**
+
+{% for finding in critical_findings %}
+#### {{ finding.title }}
+
+- **Host:** `{{ finding.host }}`
+{% if finding.port %}- **Port:** {{ finding.port }}{% endif %}
+- **Description:** {{ finding.description }}
+- **Recommendation:** {{ finding.recommendation }}
+
+{% endfor %}
+{% endif %}
+
+{% if warning_findings %}
+### 🟡 Warnings
+
+**I would not take this road without caution.**
+
+{% for finding in warning_findings %}
+#### {{ finding.title }}
+
+- **Host:** `{{ finding.host }}`
+{% if finding.port %}- **Port:** {{ finding.port }}{% endif %}
+- **Description:** {{ finding.description }}
+- **Recommendation:** {{ finding.recommendation }}
+
+{% endfor %}
+{% endif %}
+
+{% if info_findings %}
+### 🟢 Informational Notes
+
+**The Grey Pilgrim observes the following...**
+
+{% for finding in info_findings %}
+#### {{ finding.title }}
+
+- **Host:** `{{ finding.host }}`
+{% if finding.port %}- **Port:** {{ finding.port }}{% endif %}
+- **Description:** {{ finding.description }}
+- **Recommendation:** {{ finding.recommendation }}
+
+{% endfor %}
+{% endif %}
+
+{% if not findings %}
+*No significant findings detected. The realm appears peaceful... for now.*
+{% endif %}
+
+---
+
+{% if scry_results %}
+## The Palantír Reveals
+
+*OSINT gathered through the seeing stones...*
+
+### Domain Information
+
+| Attribute | Value |
+|-----------|-------|
+| **Domain** | {{ scry_results.domain }} |
+{% if scry_results.registrar %}| **Registrar** | {{ scry_results.registrar }} |{% endif %}
+{% if scry_results.creation_date %}| **Created** | {{ scry_results.creation_date }} |{% endif %}
+{% if scry_results.name_servers %}| **Name Servers** | {{ scry_results.name_servers | join(', ') }} |{% endif %}
+
+### DNS Records
+
+{% for record_type, records in scry_results.dns_records.items() %}
+{% if records %}
+**{{ record_type }} Records:**
+{% for record in records %}
+- `{{ record }}`
+{% endfor %}
+
+{% endif %}
+{% endfor %}
+
+---
+{% endif %}
+
+## The Wizard's Counsel
+
+*Prioritized recommendations for securing this realm...*
+
+{% if critical_findings %}
+### Immediate Actions Required
+
+These issues pose severe risk and must be addressed immediately:
+
+{% for finding in critical_findings %}
+1. **{{ finding.title }}** - {{ finding.recommendation }}
+{% endfor %}
+{% endif %}
+
+{% if warning_findings %}
+### Important Improvements
+
+These issues should be addressed in your security roadmap:
+
+{% for finding in warning_findings %}
+1. **{{ finding.title }}** - {{ finding.recommendation }}
+{% endfor %}
+{% endif %}
+
+{% if not critical_findings and not warning_findings %}
+*The defenses appear reasonably sound. Continue to be vigilant.*
+{% endif %}
+
+### General Security Wisdom
+
+1. **Keep systems updated** - Patch vulnerabilities as they are discovered
+2. **Minimize exposure** - Close unnecessary ports and services
+3. **Use encryption** - Replace unencrypted protocols with secure alternatives
+4. **Monitor continuously** - Set up logging and alerting for suspicious activity
+5. **Practice defense in depth** - Multiple layers of security are better than one
+
+---
+
+## Appendix
+
+### Scan Metadata
+
+- **Tool:** Staff of the Grey Pilgrim v0.1.0
+- **Generated:** {{ now.strftime('%Y-%m-%d %H:%M:%S') }}
+- **Timing Mode:** {{ timing_mode }}
+
+### Disclaimer
+
+This assessment was conducted for authorized security testing purposes only.
+The findings and recommendations are based on point-in-time scanning and may
+not reflect all vulnerabilities present in the target environment.
+
+---
+
+> *"{{ closing_quote }}"*
+
+*— The Grey Pilgrim*
