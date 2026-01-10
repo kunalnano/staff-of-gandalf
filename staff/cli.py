@@ -7,7 +7,11 @@ Typer-based CLI for Staff of the Grey Pilgrim.
 "A wizard is never late, nor is he early. He scans precisely when he means to."
 """
 
+import ipaddress
 import json
+import re
+import signal
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Optional
@@ -25,6 +29,25 @@ from staff.config import (
     settings,
 )
 from staff.models.scan_result import ScanSession
+
+
+# Global flag to track if interrupted
+_interrupted = False
+
+
+def handle_interrupt(signum, frame):
+    """Handle Ctrl+C gracefully."""
+    global _interrupted
+    _interrupted = True
+    console.print("\n\n[warning]⚠ Scan interrupted by user.[/warning]")
+    print_quote("scan_interrupted")
+    console.print("[info]The wizard retreats... for now.[/info]")
+    sys.exit(130)  # Standard exit code for SIGINT
+
+
+# Register the signal handler
+signal.signal(signal.SIGINT, handle_interrupt)
+
 
 app = typer.Typer(
     name="staff",
@@ -60,6 +83,166 @@ def get_timing_flag(stealth: bool, aggressive: bool) -> TimingMode:
         print_quote("aggressive_mode", style="warning")
         return TimingMode.AGGRESSIVE
     return TimingMode.DEFAULT
+
+
+def validate_port_spec(ports: str) -> None:
+    """
+    Validate port specification string.
+
+    Accepts formats like: "22", "80,443", "1-1000", "22,80,443,8000-9000"
+
+    Args:
+        ports: Port specification string
+
+    Raises:
+        typer.Exit: If the port specification is invalid
+    """
+    # Handle comma-separated parts
+    parts = ports.split(",")
+
+    for part in parts:
+        part = part.strip()
+        if not part:
+            continue
+
+        # Handle port ranges like "1-1000"
+        if "-" in part:
+            range_parts = part.split("-")
+            if len(range_parts) != 2:
+                console.print(
+                    f"[danger]Error: Invalid port range format '{part}'. "
+                    f"Use format like '1-1000'.[/danger]"
+                )
+                print_quote("scan_error")
+                raise typer.Exit(1)
+
+            start_str, end_str = range_parts
+            try:
+                start_port = int(start_str.strip())
+                end_port = int(end_str.strip())
+            except ValueError:
+                console.print(
+                    f"[danger]Error: Non-numeric port in range '{part}'. "
+                    f"Ports must be numbers between 1 and 65535.[/danger]"
+                )
+                print_quote("scan_error")
+                raise typer.Exit(1)
+
+            # Validate port range values
+            for port, label in [(start_port, "start"), (end_port, "end")]:
+                if port < 1:
+                    console.print(
+                        f"[danger]Error: Invalid port '{port}' in range. "
+                        f"Port numbers must be at least 1.[/danger]"
+                    )
+                    print_quote("scan_error")
+                    raise typer.Exit(1)
+                if port > 65535:
+                    console.print(
+                        f"[danger]Error: Port '{port}' out of range. "
+                        f"Maximum port number is 65535.[/danger]"
+                    )
+                    print_quote("scan_error")
+                    raise typer.Exit(1)
+
+            if start_port > end_port:
+                console.print(
+                    f"[danger]Error: Invalid port range '{part}'. "
+                    f"Start port must be less than or equal to end port.[/danger]"
+                )
+                print_quote("scan_error")
+                raise typer.Exit(1)
+        else:
+            # Single port
+            try:
+                port = int(part)
+            except ValueError:
+                console.print(
+                    f"[danger]Error: Non-numeric port '{part}'. "
+                    f"Ports must be numbers between 1 and 65535.[/danger]"
+                )
+                print_quote("scan_error")
+                raise typer.Exit(1)
+
+            if port < 1:
+                console.print(
+                    f"[danger]Error: Invalid port '{port}'. "
+                    f"Port numbers must be at least 1.[/danger]"
+                )
+                print_quote("scan_error")
+                raise typer.Exit(1)
+            if port > 65535:
+                console.print(
+                    f"[danger]Error: Port '{port}' out of range. "
+                    f"Maximum port number is 65535.[/danger]"
+                )
+                print_quote("scan_error")
+                raise typer.Exit(1)
+
+
+def validate_target(target: str) -> None:
+    """
+    Validate target specification (IP address, hostname, or CIDR range).
+
+    Args:
+        target: Target IP, hostname, or CIDR range
+
+    Raises:
+        typer.Exit: If the target specification is invalid
+    """
+    # Check for CIDR notation first
+    if "/" in target:
+        try:
+            # Try to parse as network
+            ipaddress.ip_network(target, strict=False)
+            return  # Valid CIDR notation
+        except ValueError as e:
+            console.print(
+                f"[danger]Error: Invalid CIDR notation '{target}'. "
+                f"{str(e)}[/danger]"
+            )
+            print_quote("scan_error")
+            raise typer.Exit(1)
+
+    # Check if it looks like an IP address (contains only digits and dots for IPv4)
+    # or IPv6 (contains colons)
+    if re.match(r'^[\d.]+$', target):
+        # Looks like IPv4 - validate it
+        try:
+            ipaddress.ip_address(target)
+            return  # Valid IP address
+        except ValueError:
+            console.print(
+                f"[danger]Error: Invalid IP address '{target}'. "
+                f"IP address octets must be between 0 and 255.[/danger]"
+            )
+            print_quote("scan_error")
+            raise typer.Exit(1)
+
+    if ":" in target and not target.startswith("["):
+        # Looks like IPv6 - validate it
+        try:
+            ipaddress.ip_address(target)
+            return  # Valid IPv6 address
+        except ValueError:
+            console.print(
+                f"[danger]Error: Invalid IPv6 address '{target}'.[/danger]"
+            )
+            print_quote("scan_error")
+            raise typer.Exit(1)
+
+    # Otherwise treat as hostname - basic validation
+    # Hostnames can contain alphanumerics, hyphens, and dots
+    hostname_pattern = r'^[a-zA-Z0-9]([a-zA-Z0-9\-\.]*[a-zA-Z0-9])?$|^[a-zA-Z0-9]$'
+    if not re.match(hostname_pattern, target):
+        # Allow localhost and other single-word hostnames
+        if target.lower() not in ['localhost']:
+            console.print(
+                f"[danger]Error: Invalid target '{target}'. "
+                f"Target must be a valid IP address, hostname, or CIDR range.[/danger]"
+            )
+            print_quote("scan_error")
+            raise typer.Exit(1)
 
 
 def save_results(session: ScanSession, target: str) -> Path:
@@ -122,6 +305,9 @@ def survey(
 
     Runs illuminate, shadowfax, delve, and generates a comprehensive report.
     """
+    # Validate target before proceeding
+    validate_target(target)
+
     timing = get_timing_flag(stealth, aggressive)
     print_quote("scan_start")
 
@@ -207,12 +393,19 @@ def illuminate(
         bool,
         typer.Option("--aggressive", "-a", help="Use fastest scans (T5)"),
     ] = False,
+    json_output: Annotated[
+        Optional[Path],
+        typer.Option("--json", "-j", help="Save results to JSON file"),
+    ] = None,
 ) -> None:
     """
     Host discovery only (nmap -sn ping sweep).
 
     Discovers live hosts on a network without port scanning.
     """
+    # Validate target before proceeding
+    validate_target(target)
+
     timing = get_timing_flag(stealth, aggressive)
     print_quote("scan_start")
 
@@ -231,8 +424,22 @@ def illuminate(
                     f"  [{status_style}]● {host.ip_address}[/{status_style}]"
                     + (f" ({host.hostname})" if host.hostname else "")
                 )
+
+            # Save JSON if requested
+            if json_output:
+                session = ScanSession(target=target, timing_mode=timing.value)
+                session.illuminate_results = results
+                with open(json_output, "w") as f:
+                    json.dump(session.to_json_dict(), f, indent=2)
+                console.print(f"\n[success]✓ JSON results saved to:[/success] {json_output}")
         else:
             print_quote("no_hosts_found")
+            if json_output:
+                session = ScanSession(target=target, timing_mode=timing.value)
+                session.illuminate_results = []
+                with open(json_output, "w") as f:
+                    json.dump(session.to_json_dict(), f, indent=2)
+                console.print(f"\n[success]✓ JSON results saved to:[/success] {json_output}")
     except PermissionError:
         print_quote("permission_denied")
         console.print("[danger]Root privileges may be required for this scan.[/danger]")
@@ -252,12 +459,19 @@ def shadowfax(
         bool,
         typer.Option("--aggressive", "-a", help="Use fastest scans (T5)"),
     ] = False,
+    json_output: Annotated[
+        Optional[Path],
+        typer.Option("--json", "-j", help="Save results to JSON file"),
+    ] = None,
 ) -> None:
     """
     Fast port scan only (nmap -F --min-rate 1000).
 
     Quick scan of the most common ports.
     """
+    # Validate target before proceeding
+    validate_target(target)
+
     timing = get_timing_flag(stealth, aggressive)
     print_quote("scan_start")
 
@@ -278,7 +492,16 @@ def shadowfax(
                         f"    [{state_style}]● {port_info['port']}/{port_info['protocol']}"
                         f" - {port_info.get('service', 'unknown')}[/{state_style}]"
                     )
-        else:
+
+        # Save JSON if requested
+        if json_output:
+            session = ScanSession(target=target, timing_mode=timing.value)
+            session.shadowfax_results = results if results else {}
+            with open(json_output, "w") as f:
+                json.dump(session.to_json_dict(), f, indent=2)
+            console.print(f"\n[success]✓ JSON results saved to:[/success] {json_output}")
+
+        if not results:
             console.print("[info]No open ports found.[/info]")
         print_quote("scan_complete")
     except PermissionError:
@@ -304,12 +527,20 @@ def delve(
         bool,
         typer.Option("--aggressive", "-a", help="Use fastest scans (T5)"),
     ] = False,
+    json_output: Annotated[
+        Optional[Path],
+        typer.Option("--json", "-j", help="Save results to JSON file"),
+    ] = None,
 ) -> None:
     """
     Deep scan with service/version detection (nmap -sV -sC -A).
 
     Comprehensive scan with version detection, scripts, and OS fingerprinting.
     """
+    # Validate target and port specification before proceeding
+    validate_target(target)
+    validate_port_spec(ports)
+
     timing = get_timing_flag(stealth, aggressive)
     print_quote("scan_start")
 
@@ -333,7 +564,16 @@ def delve(
                         console.print(f"      Service: {port_info['service']}")
                     if port_info.get("version"):
                         console.print(f"      Version: {port_info['version']}")
-        else:
+
+        # Save JSON if requested
+        if json_output:
+            session = ScanSession(target=target, timing_mode=timing.value)
+            session.delve_results = results if results else {}
+            with open(json_output, "w") as f:
+                json.dump(session.to_json_dict(), f, indent=2)
+            console.print(f"\n[success]✓ JSON results saved to:[/success] {json_output}")
+
+        if not results:
             console.print("[info]No services detected.[/info]")
         print_quote("scan_complete")
     except PermissionError:
@@ -347,6 +587,10 @@ def delve(
 @app.command()
 def scry(
     domain: Annotated[str, typer.Argument(help="Target domain for OSINT lookup")],
+    json_output: Annotated[
+        Optional[Path],
+        typer.Option("--json", "-j", help="Save results to JSON file"),
+    ] = None,
 ) -> None:
     """
     OSINT only: WHOIS, DNS records (A, AAAA, MX, TXT, NS, CNAME, SOA).
@@ -383,6 +627,14 @@ def scry(
                     console.print(f"    {record_type}:")
                     for record in records:
                         console.print(f"      • {record}")
+
+            # Save JSON if requested
+            if json_output:
+                session = ScanSession(target=domain, timing_mode="default")
+                session.scry_results = results
+                with open(json_output, "w") as f:
+                    json.dump(session.to_json_dict(), f, indent=2)
+                console.print(f"\n[success]✓ JSON results saved to:[/success] {json_output}")
 
         print_quote("scan_complete")
     except Exception as e:

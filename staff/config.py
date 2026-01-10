@@ -185,6 +185,12 @@ QUOTES = {
         "The Grey Pilgrim requires nmap to see clearly.",
         "A wizard without nmap is like Gandalf without his staff.",
     ],
+    "scan_interrupted": [
+        "The scan has been interrupted. A wizard knows when to retreat.",
+        "You have chosen to end this early. Perhaps wisdom guides your hand.",
+        "Interrupted. Even the Grey Pilgrim respects the will of the user.",
+        "The journey ends before its time. But what was found remains.",
+    ],
 }
 
 
