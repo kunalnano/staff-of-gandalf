@@ -1,0 +1,211 @@
+# Counsel of the Grey Pilgrim
+
+> *"All that is gold does not glitter, not all those who wander are lost..."*
+
+---
+
+## Assessment Summary
+
+| Attribute | Value |
+|-----------|-------|
+| **Target** | {{ session.target }} |
+| **Timestamp** | {{ session.timestamp.strftime('%Y-%m-%d %H:%M:%S') }} |
+| **Timing Mode** | {{ session.timing_mode | capitalize }} |
+| **Total Findings** | {{ findings | length }} |
+
+---
+
+## Lay of the Land
+
+*The Grey Pilgrim surveys the network topology...*
+
+{% if hosts %}
+### Discovered Hosts
+
+| IP Address | Hostname | Status | MAC Address |
+|------------|----------|--------|-------------|
+{% for host in hosts %}
+| {{ host.ip_address }} | {{ host.hostname or '-' }} | {{ '✓ Up' if host.status == 'up' else '✗ Down' }} | {{ host.mac_address or '-' }} |
+{% endfor %}
+
+**Total Hosts Discovered:** {{ hosts | length }}
+{% else %}
+*No hosts were discovered in this scan.*
+{% endif %}
+
+---
+
+## Open Gates
+
+*"There are many doors in this realm, and some should remain shut."*
+
+{% if ports_by_host %}
+{% for host, ports in ports_by_host.items() %}
+### {{ host }}
+
+| Port | Protocol | State | Service | Version |
+|------|----------|-------|---------|---------|
+{% for port in ports %}
+| {{ port.port }} | {{ port.protocol | upper }} | {{ port.state | capitalize }} | {{ port.service or 'Unknown' }} | {{ port.product }}{% if port.version %} {{ port.version }}{% endif %} |
+{% endfor %}
+
+{% endfor %}
+{% else %}
+*No open ports were detected.*
+{% endif %}
+
+---
+
+## Shadows and Flames
+
+*The Grey Pilgrim has identified the following concerns...*
+
+{% if findings %}
+{% set critical_findings = findings | selectattr('severity', 'equalto', 'critical') | list %}
+{% set warning_findings = findings | selectattr('severity', 'equalto', 'warning') | list %}
+{% set info_findings = findings | selectattr('severity', 'equalto', 'info') | list %}
+
+{% if critical_findings %}
+### 🔴 Critical Findings ({{ critical_findings | length }})
+
+*"Fly, you fools!"*
+
+{% for finding in critical_findings %}
+#### {{ finding.title }}
+
+- **Host:** {{ finding.host }}
+{% if finding.port %}- **Port:** {{ finding.port }}{% endif %}
+
+- **Description:** {{ finding.description }}
+- **Recommendation:** {{ finding.recommendation }}
+
+{% endfor %}
+{% endif %}
+
+{% if warning_findings %}
+### 🟡 Warning Findings ({{ warning_findings | length }})
+
+*"I would not take this road without caution."*
+
+{% for finding in warning_findings %}
+#### {{ finding.title }}
+
+- **Host:** {{ finding.host }}
+{% if finding.port %}- **Port:** {{ finding.port }}{% endif %}
+
+- **Description:** {{ finding.description }}
+- **Recommendation:** {{ finding.recommendation }}
+
+{% endfor %}
+{% endif %}
+
+{% if info_findings %}
+### 🟢 Informational ({{ info_findings | length }})
+
+*"The Grey Pilgrim finds this acceptable, for now."*
+
+{% for finding in info_findings %}
+#### {{ finding.title }}
+
+- **Host:** {{ finding.host }}
+{% if finding.port %}- **Port:** {{ finding.port }}{% endif %}
+
+- **Description:** {{ finding.description }}
+- **Recommendation:** {{ finding.recommendation }}
+
+{% endfor %}
+{% endif %}
+
+{% else %}
+*No significant security findings were identified. The realm appears well-guarded.*
+{% endif %}
+
+---
+
+{% if scry %}
+## The Mirror's Revelations
+
+*OSINT findings for {{ scry.domain }}*
+
+{% if scry.registrar %}
+### Domain Information
+
+| Attribute | Value |
+|-----------|-------|
+| **Registrar** | {{ scry.registrar }} |
+{% if scry.creation_date %}| **Created** | {{ scry.creation_date.strftime('%Y-%m-%d') }} |{% endif %}
+
+{% endif %}
+
+{% if scry.name_servers %}
+### Name Servers
+
+{% for ns in scry.name_servers %}
+- {{ ns }}
+{% endfor %}
+{% endif %}
+
+{% if scry.dns_records %}
+### DNS Records
+
+{% for record_type, records in scry.dns_records.items() %}
+{% if records %}
+**{{ record_type }}:**
+{% for record in records %}
+- `{{ record }}`
+{% endfor %}
+
+{% endif %}
+{% endfor %}
+{% endif %}
+
+---
+
+{% endif %}
+
+## The Wizard's Counsel
+
+*Prioritized recommendations for the defenders of this realm:*
+
+{% if findings %}
+{% set critical_count = findings | selectattr('severity', 'equalto', 'critical') | list | length %}
+{% set warning_count = findings | selectattr('severity', 'equalto', 'warning') | list | length %}
+
+1. **Immediate Actions Required:** {{ critical_count }} critical finding(s) demand attention
+2. **Review and Remediate:** {{ warning_count }} warning(s) should be evaluated
+3. **Maintain Vigilance:** Continue regular security assessments
+
+### Priority Actions
+
+{% for finding in findings %}
+{% if finding.severity == 'critical' %}
+- [ ] **[CRITICAL]** {{ finding.recommendation }}
+{% endif %}
+{% endfor %}
+
+{% for finding in findings %}
+{% if finding.severity == 'warning' %}
+- [ ] **[WARNING]** {{ finding.recommendation }}
+{% endif %}
+{% endfor %}
+
+{% else %}
+The Grey Pilgrim finds no urgent concerns at this time. However, vigilance is always wise:
+
+1. Continue regular security assessments
+2. Keep all software up to date
+3. Monitor logs for suspicious activity
+4. Review access controls periodically
+{% endif %}
+
+---
+
+## Closing Words
+
+> *"{{ closing_quote }}"*
+
+---
+
+*Report generated by the Staff of the Grey Pilgrim v0.1.0*
+
+*"A wizard is never late, nor is he early. He scans precisely when he means to."*
