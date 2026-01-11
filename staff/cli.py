@@ -703,5 +703,137 @@ def disclaimer() -> None:
     console.print(DISCLAIMER)
 
 
+@app.command()
+def cheatsheet() -> None:
+    """
+    Quick reference for all Staff commands and options.
+    """
+    from rich.table import Table
+    from rich.panel import Panel
+    from rich import box
+
+    # Header
+    console.print()
+    console.print(Panel.fit(
+        "[bold]🧙 Staff of the Grey Pilgrim - Quick Reference[/bold]",
+        border_style="bright_white"
+    ))
+    console.print()
+
+    # Commands table
+    cmd_table = Table(
+        title="[bold]Commands[/bold]",
+        box=box.ROUNDED,
+        header_style="bold cyan",
+        title_style="bold white",
+        show_lines=True
+    )
+    cmd_table.add_column("Command", style="green", width=12)
+    cmd_table.add_column("Purpose", style="white", width=35)
+    cmd_table.add_column("Example", style="yellow", width=40)
+
+    cmd_table.add_row(
+        "survey",
+        "Full pipeline: discover → scan → analyze → report",
+        "staff survey 192.168.1.0/24 -o report.md"
+    )
+    cmd_table.add_row(
+        "illuminate",
+        "Host discovery (ping sweep)",
+        "staff illuminate 10.0.0.0/24"
+    )
+    cmd_table.add_row(
+        "shadowfax",
+        "Fast port scan (top 100 ports)",
+        "staff shadowfax 192.168.1.1"
+    )
+    cmd_table.add_row(
+        "delve",
+        "Deep scan (versions, scripts, OS)",
+        "staff delve 192.168.1.1 -p 22,80,443"
+    )
+    cmd_table.add_row(
+        "scry",
+        "OSINT: WHOIS + DNS enumeration",
+        "staff scry example.com"
+    )
+    cmd_table.add_row(
+        "council",
+        "Generate report from saved JSON",
+        "staff council scan.json -o report.md"
+    )
+    console.print(cmd_table)
+    console.print()
+
+    # Flags table
+    flags_table = Table(
+        title="[bold]Common Flags[/bold]",
+        box=box.ROUNDED,
+        header_style="bold cyan",
+        title_style="bold white"
+    )
+    flags_table.add_column("Flag", style="green", width=18)
+    flags_table.add_column("Effect", style="white", width=50)
+
+    flags_table.add_row("--stealth, -s", "Slower scans (nmap T2) - evade detection")
+    flags_table.add_row("--aggressive, -a", "Fastest scans (nmap T5) - speed over stealth")
+    flags_table.add_row("--output, -o FILE", "Save markdown report to FILE")
+    flags_table.add_row("--json, -j FILE", "Save raw JSON results to FILE")
+    flags_table.add_row("--ports, -p SPEC", "Port spec: 22,80,443 or 1-1000 or 22,80,8000-9000")
+    console.print(flags_table)
+    console.print()
+
+    # Workflows panel
+    workflows = """[bold cyan]Quick Recon:[/bold cyan]
+  staff scry target.com && staff illuminate target.com
+
+[bold cyan]Standard Assessment:[/bold cyan]
+  staff survey 192.168.1.0/24 -o network_report.md
+
+[bold cyan]Targeted Deep Dive:[/bold cyan]
+  staff shadowfax 10.0.0.5 -j quick.json
+  staff delve 10.0.0.5 -p 22,80,443,3306,5432 -j deep.json
+  staff council deep.json -o final_report.md
+
+[bold cyan]Stealth Mode:[/bold cyan]
+  staff survey 10.0.0.0/24 --stealth -o stealth_report.md
+
+[bold cyan]Fast & Loud:[/bold cyan]
+  staff survey 192.168.1.1 --aggressive -o quick_report.md"""
+
+    console.print(Panel(
+        workflows,
+        title="[bold]Common Workflows[/bold]",
+        border_style="bright_white",
+        padding=(1, 2)
+    ))
+    console.print()
+
+    # Dangerous ports reference
+    ports_table = Table(
+        title="[bold]High-Risk Ports (Auto-Flagged)[/bold]",
+        box=box.ROUNDED,
+        header_style="bold red",
+        title_style="bold white"
+    )
+    ports_table.add_column("Port", style="red", width=8)
+    ports_table.add_column("Service", style="white", width=12)
+    ports_table.add_column("Risk", style="yellow", width=45)
+
+    ports_table.add_row("21", "FTP", "Unencrypted, often anonymous access")
+    ports_table.add_row("23", "Telnet", "Unencrypted remote shell - deprecated")
+    ports_table.add_row("445", "SMB", "Ransomware favorite, lateral movement")
+    ports_table.add_row("3389", "RDP", "Brute-force target, BlueKeep vuln")
+    ports_table.add_row("6379", "Redis", "Often no auth, data exfil risk")
+    ports_table.add_row("27017", "MongoDB", "Often no auth, massive breach source")
+    console.print(ports_table)
+    console.print()
+
+    # Footer
+    console.print("[dim]Run 'staff disclaimer' before any assessment.[/dim]")
+    console.print("[dim]JSON output saved to ./reports/ by default.[/dim]")
+    console.print()
+
+
 if __name__ == "__main__":
     app()
