@@ -29,7 +29,12 @@ class Settings(BaseModel):
 
     version: str = "0.1.0"
     app_name: str = "Staff of the Grey Pilgrim"
-    reports_dir: str = "reports"
+    
+    @property
+    def reports_dir(self) -> str:
+        """Get reports directory (in current working directory)."""
+        import os
+        return os.path.join(os.getcwd(), "reports")
 
     # nmap timing templates
     timing_templates: dict = {
@@ -219,6 +224,63 @@ def print_quote(event: str, style: Optional[str] = "quote") -> None:
 def print_banner() -> None:
     """Print the application banner."""
     console.print(BANNER, style="banner")
+
+
+# Waiting tidbits - displayed during long scans
+WAITING_TIDBITS = [
+    "🧙 Gandalf strokes his beard thoughtfully...",
+    "🧙 The Grey Pilgrim gazes into the network abyss...",
+    "🧙 Consulting the Palantír of packets...",
+    "🧙 Sending forth the eagles of enumeration...",
+    "🧙 The wizard mutters ancient TCP incantations...",
+    "🧙 Pondering the mysteries of this subnet...",
+    "🧙 The staff glows with each returning packet...",
+    "🧙 Reading the runes of the routing tables...",
+    "🧙 Communing with the spirits of the network...",
+    "🧙 Even the Ents would find this scan thorough...",
+    "🧙 Patience... even Mordor was not scanned in a day...",
+    "🧙 The packets fly swift as Shadowfax...",
+    "🧙 Through caverns measureless to man...",
+    "🧙 The Eye of Sauron sees less than nmap...",
+    "🧙 Deciphering the Black Speech of firewall logs...",
+    "🧙 A wizard's work is never done...",
+    "🧙 Traversing the Mines of Network Moria...",
+    "🧙 One does not simply walk into a subnet...",
+    "🧙 The Ring of TCP completes its journey...",
+    "🧙 Whispering secrets to the routers...",
+]
+
+# Gandalf ASCII frames for spinner animation
+GANDALF_SPINNER_FRAMES = [
+    "🧙",
+    "🧙‍♂️",
+    "✨🧙",
+    "🧙✨",
+    "⚡🧙",
+    "🧙⚡",
+    "🔮🧙",
+    "🧙🔮",
+]
+
+# Phase descriptions with Gandalf flavor
+PHASE_DESCRIPTIONS = {
+    "illuminate": "Illuminate: Seeking hosts in the darkness",
+    "shadowfax": "Shadowfax: Racing through the ports",
+    "delve": "Delve: Peering deep into services",
+    "scry": "Scry: Reading the signs and portents",
+    "analyze": "Council: Weighing the findings",
+    "report": "Counsel: Inscribing the wisdom",
+}
+
+
+def get_tidbit() -> str:
+    """Get a random waiting tidbit."""
+    return random.choice(WAITING_TIDBITS)
+
+
+def get_spinner_frame(index: int) -> str:
+    """Get a spinner frame by index."""
+    return GANDALF_SPINNER_FRAMES[index % len(GANDALF_SPINNER_FRAMES)]
 
 
 # Legal disclaimer

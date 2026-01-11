@@ -56,6 +56,9 @@ staff = "staff.cli:app"
 [tool.setuptools.packages.find]
 where = ["."]
 
+[tool.setuptools.package-data]
+"staff.reporting" = ["templates/*.j2"]
+
 [tool.black]
 line-length = 100
 target-version = ['py311']

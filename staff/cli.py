@@ -17,7 +17,13 @@ from pathlib import Path
 from typing import Annotated, Optional
 
 import typer
-from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn
+from rich.live import Live
+from rich.table import Table
+from rich.panel import Panel
+from rich import box
+import time
+import threading
 
 from staff.config import (
     BANNER,
@@ -27,8 +33,96 @@ from staff.config import (
     get_quote,
     print_quote,
     settings,
+    get_tidbit,
+    PHASE_DESCRIPTIONS,
 )
 from staff.models.scan_result import ScanSession
+
+
+class GandalfProgress:
+    """
+    Enhanced progress display with Gandalf tidbits.
+    
+    Shows a progress bar with changing wisdom tidbits during long operations.
+    """
+    
+    def __init__(self, total_phases: int = 5):
+        self.total_phases = total_phases
+        self.current_phase = 0
+        self.phase_names = ["illuminate", "shadowfax", "delve", "analyze", "report"]
+        self.phase_status = {name: "⏳" for name in self.phase_names}
+        self.current_tidbit = get_tidbit()
+        self.tidbit_counter = 0
+        self._stop_tidbit = False
+        self._tidbit_thread = None
+        
+    def _rotate_tidbits(self):
+        """Background thread to rotate tidbits."""
+        while not self._stop_tidbit:
+            time.sleep(3)  # Change tidbit every 3 seconds
+            if not self._stop_tidbit:
+                self.current_tidbit = get_tidbit()
+                self.tidbit_counter += 1
+    
+    def start_tidbits(self):
+        """Start the tidbit rotation thread."""
+        self._stop_tidbit = False
+        self._tidbit_thread = threading.Thread(target=self._rotate_tidbits, daemon=True)
+        self._tidbit_thread.start()
+    
+    def stop_tidbits(self):
+        """Stop the tidbit rotation thread."""
+        self._stop_tidbit = True
+        if self._tidbit_thread:
+            self._tidbit_thread.join(timeout=1)
+    
+    def mark_phase_complete(self, phase: str):
+        """Mark a phase as complete."""
+        if phase in self.phase_status:
+            self.phase_status[phase] = "✅"
+            self.current_phase += 1
+    
+    def mark_phase_failed(self, phase: str):
+        """Mark a phase as failed."""
+        if phase in self.phase_status:
+            self.phase_status[phase] = "❌"
+            self.current_phase += 1
+    
+    def mark_phase_running(self, phase: str):
+        """Mark a phase as currently running."""
+        if phase in self.phase_status:
+            self.phase_status[phase] = "🔮"
+    
+    def get_progress_display(self) -> Panel:
+        """Generate the progress display panel."""
+        # Build phase status line
+        phase_line = " → ".join([
+            f"{self.phase_status[p]} {p.capitalize()}" 
+            for p in self.phase_names
+        ])
+        
+        # Progress bar
+        completed = self.current_phase
+        total = self.total_phases
+        bar_width = 30
+        filled = int((completed / total) * bar_width) if total > 0 else 0
+        bar = "█" * filled + "░" * (bar_width - filled)
+        percentage = int((completed / total) * 100) if total > 0 else 0
+        
+        # Build display
+        content = f"""
+{phase_line}
+
+[cyan]Progress:[/cyan] [{bar}] {percentage}%
+
+[dim italic]{self.current_tidbit}[/dim italic]
+"""
+        return Panel(
+            content.strip(),
+            title="[bold white]🧙 Scan Progress[/bold white]",
+            border_style="grey50",
+            padding=(0, 2),
+        )
 
 
 # Global flag to track if interrupted
@@ -322,57 +416,75 @@ def survey(
 
     session = ScanSession(target=target, timing_mode=timing.value)
 
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        console=console,
-    ) as progress:
-        # Phase 1: Illuminate (Host Discovery)
-        task = progress.add_task("[cyan]Illuminate: Discovering hosts...", total=None)
-        try:
-            session.illuminate_results = illuminate.discover_hosts(target, timing)
-            progress.update(task, completed=True)
-            if session.illuminate_results:
-                print_quote("host_found")
-            else:
-                print_quote("no_hosts_found")
-        except Exception as e:
-            console.print(f"[danger]Illuminate failed: {e}[/danger]")
-            print_quote("scan_error")
+    # Initialize Gandalf progress tracker
+    gandalf = GandalfProgress(total_phases=5)
+    gandalf.start_tidbits()
+    
+    console.print()  # Spacing
+    
+    try:
+        with Live(gandalf.get_progress_display(), refresh_per_second=4, console=console) as live:
+            # Phase 1: Illuminate (Host Discovery)
+            gandalf.mark_phase_running("illuminate")
+            live.update(gandalf.get_progress_display())
+            try:
+                session.illuminate_results = illuminate.discover_hosts(target, timing)
+                gandalf.mark_phase_complete("illuminate")
+                live.update(gandalf.get_progress_display())
+            except Exception as e:
+                gandalf.mark_phase_failed("illuminate")
+                live.update(gandalf.get_progress_display())
+                console.print(f"\n[danger]Illuminate failed: {e}[/danger]")
 
-        # Phase 2: Shadowfax (Fast Port Scan)
-        task = progress.add_task("[cyan]Shadowfax: Fast port scan...", total=None)
-        try:
-            session.shadowfax_results = shadowfax.fast_scan(target, timing)
-            progress.update(task, completed=True)
-        except Exception as e:
-            console.print(f"[danger]Shadowfax failed: {e}[/danger]")
-            print_quote("scan_error")
+            # Phase 2: Shadowfax (Fast Port Scan)
+            gandalf.mark_phase_running("shadowfax")
+            live.update(gandalf.get_progress_display())
+            try:
+                session.shadowfax_results = shadowfax.fast_scan(target, timing)
+                gandalf.mark_phase_complete("shadowfax")
+                live.update(gandalf.get_progress_display())
+            except Exception as e:
+                gandalf.mark_phase_failed("shadowfax")
+                live.update(gandalf.get_progress_display())
+                console.print(f"\n[danger]Shadowfax failed: {e}[/danger]")
 
-        # Phase 3: Delve (Deep Scan)
-        task = progress.add_task("[cyan]Delve: Deep scanning...", total=None)
-        try:
-            session.delve_results = delve.deep_scan(target, timing)
-            progress.update(task, completed=True)
-        except Exception as e:
-            console.print(f"[danger]Delve failed: {e}[/danger]")
-            print_quote("scan_error")
+            # Phase 3: Delve (Deep Scan)
+            gandalf.mark_phase_running("delve")
+            live.update(gandalf.get_progress_display())
+            try:
+                session.delve_results = delve.deep_scan(target, timing)
+                gandalf.mark_phase_complete("delve")
+                live.update(gandalf.get_progress_display())
+            except Exception as e:
+                gandalf.mark_phase_failed("delve")
+                live.update(gandalf.get_progress_display())
+                console.print(f"\n[danger]Delve failed: {e}[/danger]")
 
-        # Phase 4: Analysis
-        task = progress.add_task("[cyan]Analyzing findings...", total=None)
-        try:
-            session.findings = threat_assess.assess_threats(session)
-            progress.update(task, completed=True)
-        except Exception as e:
-            console.print(f"[danger]Analysis failed: {e}[/danger]")
+            # Phase 4: Analysis
+            gandalf.mark_phase_running("analyze")
+            live.update(gandalf.get_progress_display())
+            try:
+                session.findings = threat_assess.assess_threats(session)
+                gandalf.mark_phase_complete("analyze")
+                live.update(gandalf.get_progress_display())
+            except Exception as e:
+                gandalf.mark_phase_failed("analyze")
+                live.update(gandalf.get_progress_display())
+                console.print(f"\n[danger]Analysis failed: {e}[/danger]")
 
-        # Phase 5: Generate Report
-        task = progress.add_task("[cyan]Generating report...", total=None)
-        try:
-            council.generate_report(session, output)
-            progress.update(task, completed=True)
-        except Exception as e:
-            console.print(f"[danger]Report generation failed: {e}[/danger]")
+            # Phase 5: Generate Report
+            gandalf.mark_phase_running("report")
+            live.update(gandalf.get_progress_display())
+            try:
+                council.generate_report(session, output)
+                gandalf.mark_phase_complete("report")
+                live.update(gandalf.get_progress_display())
+            except Exception as e:
+                gandalf.mark_phase_failed("report")
+                live.update(gandalf.get_progress_display())
+                console.print(f"\n[danger]Report generation failed: {e}[/danger]")
+    finally:
+        gandalf.stop_tidbits()
 
     # Save JSON results
     json_path = save_results(session, target)
