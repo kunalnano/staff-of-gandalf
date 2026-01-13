@@ -1,15 +1,39 @@
 # 🧙 Staff of the Grey Pilgrim
 
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Built with AI Agents](https://img.shields.io/badge/Built%20with-AI%20Agents-purple.svg)](#agentic-development)
+[![Lines of Code](https://img.shields.io/badge/Lines%20of%20Code-2200+-green.svg)](#)
+
 > _"A wizard is never late, nor is he early. He scans precisely when he means to."_
 
-A Gandalf-themed security assessment CLI that wraps real security tools (nmap, whois, DNS) and generates narrative reports written in Gandalf's voice.
+A Gandalf-themed security assessment CLI that wraps real security tools (nmap, whois, DNS) and generates narrative reports written in Gandalf's voice. Features 72+ authentic Gandalf quotes woven throughout the scanning experience.
+
+## ✨ Features
+
+- **🔦 Illuminate** - Host discovery with ping sweeps
+- **🐴 Shadowfax** - Fast port scanning ("Show us the meaning of haste")
+- **⛏️ Delve** - Deep scanning with version detection and OS fingerprinting
+- **🔮 Scry** - OSINT via WHOIS and DNS enumeration
+- **📜 Council** - Generate narrative reports in Gandalf's voice
+
+## 🤖 Agentic Development
+
+This project was built entirely using **AI-powered autonomous agents** via [autocoder](https://github.com/leonvanzyl/autocoder). The development process:
+
+- **90 features** defined and implemented autonomously
+- **2,200+ lines** of Python generated through iterative agent sessions
+- **Zero manual coding** - all code written by Claude via agentic workflows
+- Demonstrates practical application of AI pair programming at scale
+
+This represents a new paradigm in software development where humans define requirements and AI agents handle implementation.
 
 ## Installation
 
 ```bash
 # Clone the repository
-git clone https://github.com/gandalf/staff.git
-cd staff
+git clone https://github.com/kunalnano/staff-of-gandalf.git
+cd staff-of-gandalf
 
 # Create virtual environment
 python3 -m venv venv
@@ -129,6 +153,10 @@ This tool is designed for **AUTHORIZED security testing only**. By using this to
 3. You will comply with all applicable laws and regulations
 
 Unauthorized access to computer systems is illegal and unethical.
+
+## Contributing
+
+Contributions welcome! This project demonstrates that AI-generated code can serve as a foundation for community collaboration.
 
 ## License
 
