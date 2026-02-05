@@ -27,7 +27,7 @@ class TimingMode(str, Enum):
 class Settings(BaseModel):
     """Application settings."""
 
-    version: str = "0.1.0"
+    version: str = "0.3.0"
     app_name: str = "Staff of the Grey Pilgrim"
     
     @property
@@ -75,7 +75,7 @@ console = Console(theme=GANDALF_THEME)
 # Banner displayed on CLI startup
 BANNER = """
 ╭─────────────────────────────────────────────╮
-│  🧙 Staff of the Grey Pilgrim v0.1.0        │
+│  🧙 Staff of the Grey Pilgrim v0.3.0        │
 │  "All that is gold does not glitter..."     │
 ╰─────────────────────────────────────────────╯
 """
@@ -195,6 +195,24 @@ QUOTES = {
         "You have chosen to end this early. Perhaps wisdom guides your hand.",
         "Interrupted. Even the Grey Pilgrim respects the will of the user.",
         "The journey ends before its time. But what was found remains.",
+    ],
+    "shire_peaceful": [
+        "All is well. The Shire sleeps soundly tonight.",
+        "No strangers walk these lands. The hobbits are safe.",
+        "The watch reports nothing amiss. A quiet night in the Shire.",
+        "Peace reigns in the Shire. But vigilance must endure.",
+    ],
+    "shire_stranger": [
+        "There are strange folk abroad. Remain watchful.",
+        "Strangers have entered the Shire. This cannot be ignored.",
+        "New faces appear where they should not. Investigate at once.",
+        "The Enemy has many servants. Not all wear the face of evil.",
+    ],
+    "shire_baseline": [
+        "The Shire is now catalogued. Every hobbit accounted for.",
+        "I have marked every resident of these lands. None shall escape notice.",
+        "The baseline is set. From this point, all changes shall be known.",
+        "Keep it secret, keep it safe. Your network inventory is preserved.",
     ],
 }
 

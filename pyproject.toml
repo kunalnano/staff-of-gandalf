@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "staff"
-version = "0.1.0"
+version = "0.3.0"
 description = "Staff of the Grey Pilgrim - A Gandalf-themed security assessment CLI"
 readme = "README.md"
 license = {text = "MIT"}
@@ -35,6 +35,7 @@ dependencies = [
     "dnspython>=2.4.0",
     "python-whois>=0.8.0",
     "Jinja2>=3.1.0",
+    "mac-vendor-lookup>=0.1.12",
 ]
 
 [project.optional-dependencies]

@@ -807,6 +807,409 @@ def council(
         raise typer.Exit(1)
 
 
+# =====================================================================
+# SHIRE — Network Inventory & Guardian
+# =====================================================================
+
+shire_app = typer.Typer(
+    name="shire",
+    help="🏡 Shire Watch — Network inventory, baselining, and intruder detection",
+    no_args_is_help=True,
+)
+app.add_typer(shire_app, name="shire")
+
+
+@shire_app.command("scan")
+def shire_scan(
+    target: Annotated[str, typer.Argument(help="Network CIDR (e.g., 192.168.1.0/24)")],
+    stealth: Annotated[bool, typer.Option("--stealth", "-s", help="Stealth timing")] = False,
+    aggressive: Annotated[bool, typer.Option("--aggressive", "-a", help="Aggressive timing")] = False,
+    no_ports: Annotated[bool, typer.Option("--no-ports", help="Skip port scan")] = False,
+    json_output: Annotated[Optional[Path], typer.Option("--json", "-j", help="Save JSON")] = None,
+) -> None:
+    """
+    Scan the network and display all devices with vendor identification.
+
+    Like Gandalf surveying the Shire — see who lives here.
+    """
+    validate_target(target)
+    timing = get_timing_flag(stealth, aggressive)
+
+    console.print('\n[quote]"The Shire. It\'s been protected for many years."[/quote]\n')
+    console.print(f"[title]Shire Scan:[/title] {target}")
+
+    from staff.scanners.shire import scan_network
+
+    gandalf = GandalfProgress(total_phases=2 if not no_ports else 1)
+    gandalf.phase_names = ["illuminate", "shadowfax"] if not no_ports else ["illuminate"]
+    gandalf.phase_status = {n: "⏳" for n in gandalf.phase_names}
+    gandalf.start_tidbits()
+
+    try:
+        gandalf.mark_phase_running("illuminate")
+        devices = scan_network(target, timing, quick_ports=not no_ports)
+        gandalf.mark_phase_complete("illuminate")
+        if not no_ports and "shadowfax" in gandalf.phase_names:
+            gandalf.mark_phase_complete("shadowfax")
+    finally:
+        gandalf.stop_tidbits()
+
+    if not devices:
+        console.print('\n[quote]"The world is grey, the mountains old... no devices respond."[/quote]')
+        return
+
+    # Display results
+    _print_device_table(devices, title="Residents of the Shire")
+
+    console.print(f"\n[success]Found {len(devices)} device(s) on {target}[/success]")
+
+    if json_output:
+        import json as json_mod
+        data = [d.model_dump(mode="json") for d in devices]
+        with open(json_output, "w") as f:
+            json_mod.dump(data, f, indent=2, default=str)
+        console.print(f"[success]✓ JSON saved to:[/success] {json_output}")
+
+    console.print('\n[quote]"All we have to decide is what to do with the devices that are given us."[/quote]\n')
+    console.print("[info]💡 Run [bold]staff shire baseline[/bold] to save this as your known device list.[/info]")
+
+
+@shire_app.command("baseline")
+def shire_baseline(
+    target: Annotated[str, typer.Argument(help="Network CIDR (e.g., 192.168.1.0/24)")],
+    name: Annotated[str, typer.Option("--name", "-n", help="Baseline profile name")] = "default",
+    stealth: Annotated[bool, typer.Option("--stealth", "-s")] = False,
+    aggressive: Annotated[bool, typer.Option("--aggressive", "-a")] = False,
+) -> None:
+    """
+    Scan and save as the known device baseline.
+
+    Establishes the "residents of the Shire" — your trusted device list.
+    Run this once when your network is clean, then use 'watch' to detect intruders.
+    """
+    validate_target(target)
+    timing = get_timing_flag(stealth, aggressive)
+
+    console.print('\n[quote]"Keep it secret, keep it safe."[/quote]\n')
+    console.print(f"[title]Establishing Shire Baseline:[/title] {target}")
+    console.print(f"[subtitle]Profile:[/subtitle] {name}")
+
+    from staff.scanners.shire import scan_network, save_baseline, load_baseline
+    from staff.models.shire_models import ShireBaseline
+
+    devices = scan_network(target, timing)
+
+    # If baseline already exists, carry forward labels
+    existing = load_baseline(name)
+    if existing:
+        console.print(f"[info]Updating existing baseline ({existing.device_count} devices)...[/info]")
+        for d in devices:
+            if d.mac_address:
+                old = existing.find_by_mac(d.mac_address)
+            else:
+                old = existing.find_by_ip(d.ip_address)
+            if old:
+                d.label = old.label
+                d.first_seen = old.first_seen
+                d.status = "known"
+
+    baseline = ShireBaseline(
+        name=name,
+        network=target,
+        devices=devices,
+    )
+
+    path = save_baseline(baseline)
+
+    _print_device_table(devices, title=f"Baseline '{name}' — {len(devices)} devices")
+
+    console.print(f"\n[success]✓ Baseline saved:[/success] {path}")
+    console.print(f"[success]  {len(devices)} device(s) registered as known residents.[/success]")
+    console.print('\n[quote]"The Shire is now under watch. No stranger shall pass unnoticed."[/quote]\n')
+    console.print("[info]💡 Run [bold]staff shire watch {target}[/bold] to check for intruders.[/info]")
+    console.print("[info]💡 Run [bold]staff shire label <MAC> \"My Device\"[/bold] to name your devices.[/info]")
+
+
+@shire_app.command("watch")
+def shire_watch(
+    target: Annotated[str, typer.Argument(help="Network CIDR (e.g., 192.168.1.0/24)")],
+    name: Annotated[str, typer.Option("--name", "-n", help="Baseline to compare against")] = "default",
+    stealth: Annotated[bool, typer.Option("--stealth", "-s")] = False,
+    aggressive: Annotated[bool, typer.Option("--aggressive", "-a")] = False,
+    output: Annotated[Optional[Path], typer.Option("--output", "-o", help="Save report")] = None,
+) -> None:
+    """
+    Scan and compare against baseline — detect intruders.
+
+    The Shire Watch: finds strangers, missing devices, and changes.
+    """
+    validate_target(target)
+    timing = get_timing_flag(stealth, aggressive)
+
+    from staff.scanners.shire import scan_network, load_baseline, compare_to_baseline
+
+    baseline = load_baseline(name)
+    if not baseline:
+        console.print(f'[danger]No baseline found named "{name}". Run [bold]staff shire baseline[/bold] first.[/danger]')
+        raise typer.Exit(1)
+
+    console.print(f'\n[quote]"I am a servant of the Secret Fire, wielder of the flame of Anor. '
+                   f'You shall not pass!"[/quote]\n')
+    console.print(f"[title]Shire Watch:[/title] {target}")
+    console.print(f"[subtitle]Comparing against baseline:[/subtitle] {name} ({baseline.device_count} known devices)")
+
+    devices = scan_network(target, timing)
+    diff = compare_to_baseline(devices, baseline)
+
+    # --- Threat Assessment Header ---
+    threat_banners = {
+        "peaceful": ("[success]🟢 THE SHIRE IS PEACEFUL[/success]",
+                     '"All is well. The Shire sleeps soundly tonight."'),
+        "watchful": ("[warning]🟡 STRANGERS AT THE GATE[/warning]",
+                     '"There are strange folk abroad. Remain watchful."'),
+        "alarmed": ("[danger]🔴 THE SHIRE IS UNDER THREAT[/danger]",
+                    '"The enemy has many spies. Birds, beasts... and unauthorized devices."'),
+    }
+    banner_style, banner_quote = threat_banners[diff.threat_level]
+    console.print(f"\n{banner_style}")
+    console.print(f'[quote]"{banner_quote}"[/quote]\n')
+
+    # --- Known devices present ---
+    if diff.known_present:
+        console.print(f"[success]✅ Known Hobbits Present: {len(diff.known_present)}[/success]")
+        _print_device_table(diff.known_present, title="Known Devices — Present", compact=True)
+
+    # --- Strangers (CRITICAL) ---
+    if diff.strangers:
+        console.print(f"\n[danger]⚠️  STRANGERS AT THE GATE: {len(diff.strangers)}[/danger]")
+        console.print("[danger]These devices are NOT in your baseline:[/danger]")
+        _print_device_table(diff.strangers, title="⚠️  Unknown Devices", highlight_strangers=True)
+
+    # --- Missing devices ---
+    if diff.missing:
+        console.print(f"\n[warning]📭 Gone on a Journey: {len(diff.missing)}[/warning]")
+        _print_device_table(diff.missing, title="Missing from Network", compact=True)
+
+    # --- Changes ---
+    if diff.changed:
+        console.print(f"\n[info]🔄 Changed Since Baseline: {len(diff.changed)}[/info]")
+        for change in diff.changed:
+            console.print(f"  [subtitle]{change['device']}[/subtitle] ({change.get('mac', 'no MAC')})")
+            for c in change["changes"]:
+                console.print(f"    {c['field']}: {c['old']} → {c['new']}")
+
+    # --- Summary ---
+    console.print("\n" + "─" * 60)
+    summary = (
+        f"Known: {len(diff.known_present)} | "
+        f"Strangers: {len(diff.strangers)} | "
+        f"Missing: {len(diff.missing)} | "
+        f"Changed: {len(diff.changed)}"
+    )
+    console.print(f"[title]Summary:[/title] {summary}")
+
+    # --- Save report ---
+    if output:
+        _save_shire_report(diff, baseline, target, output)
+        console.print(f"[success]✓ Report saved to:[/success] {output}")
+
+    if diff.strangers:
+        console.print("\n[warning]💡 Investigate unknown devices. If legitimate, add them with:[/warning]")
+        for s in diff.strangers:
+            identifier = s.mac_address or s.ip_address
+            console.print(f'   [info]staff shire approve {identifier} --name "{name}"[/info]')
+
+    console.print()
+
+
+@shire_app.command("label")
+def shire_label(
+    identifier: Annotated[str, typer.Argument(help="MAC address or IP of device")],
+    label: Annotated[str, typer.Argument(help="Friendly name (e.g., 'Living Room Echo')")],
+    name: Annotated[str, typer.Option("--name", "-n", help="Baseline profile")] = "default",
+) -> None:
+    """
+    Assign a friendly name to a device in the baseline.
+
+    Makes the watch report much more readable when you have 30+ devices.
+    """
+    from staff.scanners.shire import label_device
+
+    if label_device(name, identifier, label):
+        console.print(f'[success]✓ Labeled {identifier} as "{label}"[/success]')
+    else:
+        console.print(f'[danger]Device {identifier} not found in baseline "{name}".[/danger]')
+
+
+@shire_app.command("approve")
+def shire_approve(
+    identifier: Annotated[str, typer.Argument(help="MAC or IP of device to add")],
+    name: Annotated[str, typer.Option("--name", "-n", help="Baseline profile")] = "default",
+    device_label: Annotated[Optional[str], typer.Option("--label", "-l", help="Friendly name")] = None,
+) -> None:
+    """
+    Add a stranger to the baseline as a known device.
+
+    Use after investigating an unknown device and confirming it's yours.
+    """
+    from staff.scanners.shire import load_baseline, save_baseline
+    from staff.models.shire_models import ShireDevice
+
+    bl = load_baseline(name)
+    if not bl:
+        console.print(f'[danger]No baseline "{name}" found.[/danger]')
+        raise typer.Exit(1)
+
+    # Check if already in baseline
+    id_upper = identifier.upper()
+    for d in bl.devices:
+        if (d.mac_address and d.mac_address.upper() == id_upper) or d.ip_address == identifier:
+            console.print(f"[warning]Device {identifier} is already in baseline.[/warning]")
+            return
+
+    # Create a minimal device entry
+    is_mac = ":" in identifier and len(identifier) == 17
+    device = ShireDevice(
+        ip_address="" if is_mac else identifier,
+        mac_address=identifier if is_mac else None,
+        label=device_label,
+        status="known",
+    )
+
+    bl.devices.append(device)
+    bl.updated_at = datetime.now()
+    save_baseline(bl)
+
+    label_str = f' as "{device_label}"' if device_label else ""
+    console.print(f'[success]✓ Device {identifier} approved and added to baseline "{name}"{label_str}.[/success]')
+    console.print('[quote]"Welcome to the Shire, friend."[/quote]')
+
+
+@shire_app.command("list")
+def shire_list(
+    name: Annotated[Optional[str], typer.Argument(help="Baseline name to view (omit for all)")] = None,
+) -> None:
+    """
+    List saved baselines or view devices in a specific baseline.
+    """
+    from staff.scanners.shire import load_baseline, list_baselines
+
+    if name:
+        bl = load_baseline(name)
+        if not bl:
+            console.print(f'[danger]No baseline "{name}" found.[/danger]')
+            raise typer.Exit(1)
+        console.print(f'\n[title]Baseline:[/title] {bl.name}')
+        console.print(f'[subtitle]Network:[/subtitle] {bl.network}')
+        console.print(f'[subtitle]Devices:[/subtitle] {bl.device_count}')
+        console.print(f'[subtitle]Updated:[/subtitle] {bl.updated_at.strftime("%Y-%m-%d %H:%M")}')
+        _print_device_table(bl.devices, title=f"Devices in '{name}'")
+    else:
+        baselines = list_baselines()
+        if not baselines:
+            console.print("[info]No baselines saved yet. Run [bold]staff shire baseline[/bold] to create one.[/info]")
+            return
+        table = Table(title="Saved Shire Baselines", box=box.ROUNDED, header_style="bold cyan")
+        table.add_column("Name", style="green")
+        table.add_column("Network")
+        table.add_column("Devices", justify="right")
+        table.add_column("Last Updated")
+        for b in baselines:
+            table.add_row(b["name"], b["network"], str(b["device_count"]), str(b["updated_at"])[:19])
+        console.print(table)
+
+
+# ---------------------------------------------------------------------------
+# Shared display helpers
+# ---------------------------------------------------------------------------
+
+def _print_device_table(
+    devices: list,
+    title: str = "Devices",
+    compact: bool = False,
+    highlight_strangers: bool = False,
+) -> None:
+    """Render a device list as a Rich table."""
+    table = Table(
+        title=f"[bold]{title}[/bold]",
+        box=box.ROUNDED,
+        header_style="bold cyan",
+        show_lines=not compact,
+    )
+    table.add_column("#", style="dim", width=4, justify="right")
+    table.add_column("IP Address", style="green" if not highlight_strangers else "red")
+    table.add_column("MAC Address", style="grey70")
+    table.add_column("Vendor", style="cyan")
+    table.add_column("Hostname")
+    if not compact:
+        table.add_column("Ports", style="yellow")
+    table.add_column("Label", style="bold white")
+
+    for i, d in enumerate(devices, 1):
+        row = [
+            str(i),
+            d.ip_address,
+            d.mac_address or "—",
+            d.vendor or "Unknown",
+            d.hostname or "—",
+        ]
+        if not compact:
+            ports_str = ", ".join(str(p) for p in d.open_ports) if d.open_ports else "—"
+            row.append(ports_str)
+        row.append(d.label or "")
+        table.add_row(*row)
+
+    console.print(table)
+
+
+def _save_shire_report(diff, baseline, target: str, output: Path) -> None:
+    """Save a Shire Watch report as markdown."""
+    from datetime import datetime
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    lines = [
+        "# 🏡 The Shire Watch Report",
+        f'*"I am looking for someone to share in an adventure."*',
+        "",
+        f"**Network:** {target}",
+        f"**Baseline:** {baseline.name} ({baseline.device_count} known devices)",
+        f"**Scan Time:** {now}",
+        f"**Threat Level:** {diff.threat_level.upper()}",
+        "",
+    ]
+
+    if diff.strangers:
+        lines.append("## ⚠️ Strangers at the Gate")
+        lines.append("| IP | MAC | Vendor | Ports |")
+        lines.append("|---|---|---|---|")
+        for s in diff.strangers:
+            ports = ", ".join(str(p) for p in s.open_ports) if s.open_ports else "none"
+            lines.append(f"| {s.ip_address} | {s.mac_address or '—'} | {s.vendor or 'Unknown'} | {ports} |")
+        lines.append("")
+
+    if diff.known_present:
+        lines.append("## ✅ Known Hobbits Present")
+        lines.append("| IP | Name | Vendor |")
+        lines.append("|---|---|---|")
+        for d in diff.known_present:
+            lines.append(f"| {d.ip_address} | {d.display_name} | {d.vendor or '—'} |")
+        lines.append("")
+
+    if diff.missing:
+        lines.append("## 📭 Gone on a Journey")
+        lines.append("| IP | Name | Last MAC |")
+        lines.append("|---|---|---|")
+        for d in diff.missing:
+            lines.append(f"| {d.ip_address} | {d.display_name} | {d.mac_address or '—'} |")
+        lines.append("")
+
+    lines.append("---")
+    lines.append('*"Go not to the Elves for counsel, for they will say both no and yes. But I am no Elf. Check your router."*')
+
+    with open(output, "w") as f:
+        f.write("\n".join(lines))
+
+
 @app.command()
 def disclaimer() -> None:
     """
