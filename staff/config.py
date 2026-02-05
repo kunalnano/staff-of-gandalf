@@ -31,12 +31,29 @@ class Settings(BaseModel):
     app_name: str = "Staff of the Grey Pilgrim"
     reports_dir: str = "reports"
 
+    # Default home network — "The Shire"
+    home_network: str = "192.168.4.0/22"
+
+    # Windows workstation — "Orthanc" (the tower with the Palantír)
+    orthanc_host: str = "192.168.7.69"  # Windows workstation IP — update if needed
+    lmstudio_port: int = 1234
+    ollama_port: int = 11434
+    local_model: str = "qwen3:30b-a3b"  # Default Ollama model
+
     # nmap timing templates
     timing_templates: dict = {
         TimingMode.DEFAULT: "-T3",
         TimingMode.STEALTH: "-T2",
         TimingMode.AGGRESSIVE: "-T5",
     }
+
+    @property
+    def lmstudio_url(self) -> str:
+        return f"http://{self.orthanc_host}:{self.lmstudio_port}/v1"
+
+    @property
+    def ollama_url(self) -> str:
+        return f"http://{self.orthanc_host}:{self.ollama_port}"
 
 
 settings = Settings()

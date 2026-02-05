@@ -197,6 +197,104 @@ PORT_WISDOM: dict[int, PortInfo] = {
         description="Memcached distributed cache",
         gandalf_wisdom="Memcached without auth can be weaponized for DDoS.",
     ),
+
+    # Home Network / Consumer Services
+    1900: PortInfo(
+        service="UPnP/SSDP",
+        risk="warning",
+        description="Universal Plug and Play - allows automatic port forwarding",
+        gandalf_wisdom="UPnP opens gates from within. Any device on your network can punch holes in the firewall.",
+    ),
+    5000: PortInfo(
+        service="AirPlay/UPnP",
+        risk="info",
+        description="Apple AirPlay or UPnP media streaming",
+        gandalf_wisdom="AirPlay is expected within the Shire. Ensure it does not reach beyond.",
+    ),
+    5353: PortInfo(
+        service="mDNS",
+        risk="info",
+        description="Multicast DNS - local service discovery (Bonjour/Avahi)",
+        gandalf_wisdom="mDNS reveals the names and services of all devices nearby. Useful, but chatty.",
+    ),
+    7000: PortInfo(
+        service="AirPlay-Video",
+        risk="info",
+        description="Apple AirPlay video streaming",
+        gandalf_wisdom="Video streams within the realm. Harmless if kept local.",
+    ),
+    7100: PortInfo(
+        service="AirPlay-Alt",
+        risk="info",
+        description="Apple AirPlay alternative port",
+        gandalf_wisdom="Another AirPlay channel. Apple's birds carry many messages.",
+    ),
+    8008: PortInfo(
+        service="Chromecast-HTTP",
+        risk="info",
+        description="Google Chromecast HTTP control",
+        gandalf_wisdom="A Chromecast awaits commands. Only a concern if uninvited guests share the network.",
+    ),
+    8009: PortInfo(
+        service="Chromecast-CAST",
+        risk="info",
+        description="Google Cast protocol",
+        gandalf_wisdom="The Cast protocol. Entertainment, not danger — unless your network has strangers.",
+    ),
+    8200: PortInfo(
+        service="MiniDLNA",
+        risk="info",
+        description="DLNA media server",
+        gandalf_wisdom="A media library open to the local network. Keep it behind the gates.",
+    ),
+    9100: PortInfo(
+        service="Printer-RAW",
+        risk="warning",
+        description="Raw network printing - no authentication required",
+        gandalf_wisdom="Network printers accept jobs from anyone who asks. A minor but real risk.",
+    ),
+    10000: PortInfo(
+        service="Webmin/NDMP",
+        risk="warning",
+        description="Webmin admin panel or NDMP data management",
+        gandalf_wisdom="Admin panels should be behind strong authentication, not open doors.",
+    ),
+    49152: PortInfo(
+        service="Ephemeral",
+        risk="info",
+        description="Dynamic/ephemeral port range (49152-65535) - typically OS-assigned",
+        gandalf_wisdom="A high port, likely assigned by the OS for a transient purpose. Note it, but do not fear it.",
+    ),
+    49153: PortInfo(
+        service="Ephemeral",
+        risk="info",
+        description="Dynamic/ephemeral port range",
+        gandalf_wisdom="Another transient port. The OS opens these as needed.",
+    ),
+    49154: PortInfo(
+        service="Ephemeral",
+        risk="info",
+        description="Dynamic/ephemeral port range",
+        gandalf_wisdom="Ephemeral ports are the comings and goings of the realm. Usually benign.",
+    ),
+    631: PortInfo(
+        service="IPP",
+        risk="info",
+        description="Internet Printing Protocol (CUPS)",
+        gandalf_wisdom="The print server. Ensure it serves only trusted hosts.",
+    ),
+    548: PortInfo(
+        service="AFP",
+        risk="warning",
+        description="Apple Filing Protocol - legacy Mac file sharing",
+        gandalf_wisdom="AFP is of an older age. SMB has since taken its place. Consider disabling it.",
+    ),
+    62078: PortInfo(
+        service="iphone-sync",
+        risk="info",
+        description="Apple iOS sync service (lockdownd)",
+        gandalf_wisdom="An iPhone reveals itself. Expected in the Shire.",
+    ),
 }
 
 

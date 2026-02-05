@@ -284,9 +284,29 @@ def main(
     show_banner()
 
 
+def resolve_target(target: Optional[str], home: bool) -> str:
+    """Resolve target from explicit argument or --home flag."""
+    if home and target:
+        console.print("[danger]Error: Cannot use both a target and --home. Pick one, wizard.[/danger]")
+        raise typer.Exit(1)
+    if home:
+        resolved = settings.home_network
+        print_quote("scan_start")
+        console.print(f"[info]🏡 The Shire (home network): {resolved}[/info]")
+        return resolved
+    if not target:
+        console.print("[danger]Error: Provide a target or use --home to scan the Shire.[/danger]")
+        raise typer.Exit(1)
+    return target
+
+
 @app.command()
 def survey(
-    target: Annotated[str, typer.Argument(help="Target IP, hostname, or CIDR range")],
+    target: Annotated[Optional[str], typer.Argument(help="Target IP, hostname, or CIDR range")] = None,
+    home: Annotated[
+        bool,
+        typer.Option("--home", help=f"Scan home network ({settings.home_network})"),
+    ] = False,
     output: Annotated[
         Path,
         typer.Option("--output", "-o", help="Output path for markdown report"),
@@ -299,12 +319,27 @@ def survey(
         bool,
         typer.Option("--aggressive", "-a", help="Use fastest scans (T5)"),
     ] = False,
+    wise: Annotated[
+        bool,
+        typer.Option("--wisdom", "-w", help="Run LLM analysis after scan"),
+    ] = False,
+    model: Annotated[
+        str,
+        typer.Option("--model", "-m", help="Claude model or local model name"),
+    ] = "claude-sonnet-4-20250514",
+    backend: Annotated[
+        str,
+        typer.Option("--backend", "-b", help="LLM backend: claude, lmstudio, ollama"),
+    ] = "claude",
 ) -> None:
     """
     Full assessment pipeline: discovery → scan → analysis → report.
 
     Runs illuminate, shadowfax, delve, and generates a comprehensive report.
+    Use --home to scan your default home network.
+    Add --wisdom for LLM-powered analysis (--backend to pick engine).
     """
+    target = resolve_target(target, home)
     # Validate target before proceeding
     validate_target(target)
 
@@ -381,10 +416,32 @@ def survey(
 
     print_quote("scan_complete")
 
+    # Phase 6: Gandalf's Wisdom (LLM Analysis)
+    if wise:
+        from staff.wisdom import LLMBackend, analyze_scan as _analyze_scan
+
+        try:
+            llm_backend = LLMBackend(backend.lower())
+        except ValueError:
+            console.print(f"[danger]Unknown backend '{backend}'. Use: claude, lmstudio, ollama[/danger]")
+            raise typer.Exit(1)
+
+        # Auto-switch model for local backends
+        _model = model
+        if _model == "claude-sonnet-4-20250514" and llm_backend != LLMBackend.CLAUDE:
+            _model = settings.local_model
+
+        scan_data = session.to_json_dict()
+        _analyze_scan(scan_data, _model, llm_backend)
+
 
 @app.command()
 def illuminate(
-    target: Annotated[str, typer.Argument(help="Target IP, hostname, or CIDR range")],
+    target: Annotated[Optional[str], typer.Argument(help="Target IP, hostname, or CIDR range")] = None,
+    home: Annotated[
+        bool,
+        typer.Option("--home", help=f"Scan home network ({settings.home_network})"),
+    ] = False,
     stealth: Annotated[
         bool,
         typer.Option("--stealth", "-s", help="Use slower, stealthier scans (T2)"),
@@ -402,7 +459,9 @@ def illuminate(
     Host discovery only (nmap -sn ping sweep).
 
     Discovers live hosts on a network without port scanning.
+    Use --home to scan your default home network.
     """
+    target = resolve_target(target, home)
     # Validate target before proceeding
     validate_target(target)
 
@@ -450,7 +509,11 @@ def illuminate(
 
 @app.command()
 def shadowfax(
-    target: Annotated[str, typer.Argument(help="Target IP, hostname, or CIDR range")],
+    target: Annotated[Optional[str], typer.Argument(help="Target IP, hostname, or CIDR range")] = None,
+    home: Annotated[
+        bool,
+        typer.Option("--home", help=f"Scan home network ({settings.home_network})"),
+    ] = False,
     stealth: Annotated[
         bool,
         typer.Option("--stealth", "-s", help="Use slower, stealthier scans (T2)"),
@@ -468,7 +531,9 @@ def shadowfax(
     Fast port scan only (nmap -F --min-rate 1000).
 
     Quick scan of the most common ports.
+    Use --home to scan your default home network.
     """
+    target = resolve_target(target, home)
     # Validate target before proceeding
     validate_target(target)
 
@@ -514,7 +579,11 @@ def shadowfax(
 
 @app.command()
 def delve(
-    target: Annotated[str, typer.Argument(help="Target IP or hostname")],
+    target: Annotated[Optional[str], typer.Argument(help="Target IP or hostname")] = None,
+    home: Annotated[
+        bool,
+        typer.Option("--home", help=f"Scan home network ({settings.home_network})"),
+    ] = False,
     ports: Annotated[
         str,
         typer.Option("--ports", "-p", help="Ports to scan (e.g., 22,80,443 or 1-1000)"),
@@ -536,7 +605,9 @@ def delve(
     Deep scan with service/version detection (nmap -sV -sC -A).
 
     Comprehensive scan with version detection, scripts, and OS fingerprinting.
+    Use --home to scan your default home network.
     """
+    target = resolve_target(target, home)
     # Validate target and port specification before proceeding
     validate_target(target)
     validate_port_spec(ports)
@@ -833,6 +904,58 @@ def cheatsheet() -> None:
     console.print("[dim]Run 'staff disclaimer' before any assessment.[/dim]")
     console.print("[dim]JSON output saved to ./reports/ by default.[/dim]")
     console.print()
+
+
+@app.command()
+def wisdom(
+    scan_json: Annotated[
+        Path,
+        typer.Argument(help="Path to saved scan JSON file"),
+    ],
+    model: Annotated[
+        str,
+        typer.Option("--model", "-m", help="Claude model or local model name"),
+    ] = "claude-sonnet-4-20250514",
+    backend: Annotated[
+        str,
+        typer.Option("--backend", "-b", help="LLM backend: claude, lmstudio, ollama"),
+    ] = "claude",
+) -> None:
+    """
+    🧙 Gandalf's Wisdom — LLM-powered scan analysis.
+
+    Feed a scan JSON to Claude or a local LLM for deep, actionable
+    security insights streamed live to your terminal.
+
+    Backends:
+      claude    — Anthropic API (requires ANTHROPIC_API_KEY)
+      lmstudio  — LM Studio on Windows workstation (Orthanc)
+      ollama    — Ollama on Windows workstation (Orthanc)
+
+    Examples:
+      staff wisdom scan.json                         # Claude (default)
+      staff wisdom scan.json -b ollama               # Ollama on Windows
+      staff wisdom scan.json -b lmstudio             # LM Studio on Windows
+      staff wisdom scan.json -b ollama -m qwen3:30b  # Specific model
+    """
+    if not scan_json.exists():
+        print_quote("scan_error")
+        console.print(f"[danger]File not found: {scan_json}[/danger]")
+        raise typer.Exit(1)
+
+    from staff.wisdom import LLMBackend, analyze_from_file
+
+    try:
+        llm_backend = LLMBackend(backend.lower())
+    except ValueError:
+        console.print(f"[danger]Unknown backend '{backend}'. Use: claude, lmstudio, ollama[/danger]")
+        raise typer.Exit(1)
+
+    # Default model per backend if user didn't change from Claude default
+    if model == "claude-sonnet-4-20250514" and llm_backend != LLMBackend.CLAUDE:
+        model = settings.local_model
+
+    analyze_from_file(scan_json, model, llm_backend)
 
 
 if __name__ == "__main__":

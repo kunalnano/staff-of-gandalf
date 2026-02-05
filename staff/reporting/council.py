@@ -11,6 +11,7 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
+from staff.analysis.posture import assess_posture
 from staff.config import get_quote
 from staff.models.scan_result import ScanSession
 
@@ -66,12 +67,16 @@ def generate_report(session: ScanSession, output_path: Path) -> None:
                 else:
                     ports_by_host[host].append(port_info)
 
+    # Run deterministic posture scoring
+    posture = assess_posture(session)
+
     # Render the template
     content = template.render(
         session=session,
         hosts=session.illuminate_results or [],
         ports_by_host=ports_by_host,
         findings=session.findings,
+        posture=posture,
         scry=session.scry_results,
         closing_quote=get_quote("report_generated"),
     )

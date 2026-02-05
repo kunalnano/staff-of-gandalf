@@ -42,6 +42,10 @@ def assess_threats(session: ScanSession) -> list[Finding]:
     if session.delve_results:
         findings.extend(_assess_deep_scan(session.delve_results))
 
+    # Home network specific checks
+    if session.shadowfax_results or session.delve_results:
+        findings.extend(_assess_home_network(session))
+
     # Sort by severity (critical first)
     severity_order = {"critical": 0, "warning": 1, "info": 2}
     findings.sort(key=lambda f: severity_order.get(f.severity, 3))
@@ -162,3 +166,114 @@ def _check_version_vulnerability(
                     )
 
     return None
+
+
+def _assess_home_network(session: ScanSession) -> list[Finding]:
+    """Home network-specific threat assessments."""
+    findings: list[Finding] = []
+
+    # Collect all open ports per host
+    host_ports: dict[str, set[int]] = {}
+    if session.shadowfax_results:
+        for host, ports in session.shadowfax_results.items():
+            if host not in host_ports:
+                host_ports[host] = set()
+            for p in ports:
+                if p.get("state") == "open":
+                    host_ports[host].add(p["port"])
+
+    if session.delve_results:
+        for host, data in session.delve_results.items():
+            if host not in host_ports:
+                host_ports[host] = set()
+            for p in data.get("ports", []):
+                if p.get("state") == "open":
+                    host_ports[host].add(p["port"])
+
+    for host, ports in host_ports.items():
+        # UPnP detection
+        if 1900 in ports:
+            findings.append(
+                Finding(
+                    severity="warning",
+                    title="UPnP Service Active",
+                    description=(
+                        f"UPnP (port 1900) is enabled on {host}. UPnP allows any device "
+                        "on the network to automatically create port forwarding rules, "
+                        "which malware can exploit to expose internal services to the internet."
+                    ),
+                    port=1900,
+                    host=host,
+                    recommendation=(
+                        "Disable UPnP on your router unless specifically needed. "
+                        "Manually configure port forwarding rules instead."
+                    ),
+                )
+            )
+
+        # Router admin on HTTP only
+        if 80 in ports and 443 not in ports:
+            gateway_indicators = {53, 80, 1900, 5353}
+            if len(ports & gateway_indicators) >= 2:
+                findings.append(
+                    Finding(
+                        severity="warning",
+                        title="Router Admin Interface Over HTTP",
+                        description=(
+                            f"The gateway at {host} serves its admin interface over unencrypted HTTP "
+                            "(port 80) with no HTTPS alternative (443) detected. Admin credentials "
+                            "could be intercepted on the local network."
+                        ),
+                        port=80,
+                        host=host,
+                        recommendation=(
+                            "Check if your router supports HTTPS admin access and enable it. "
+                            "Consider updating router firmware for TLS support."
+                        ),
+                    )
+                )
+
+        # DNS resolver on non-gateway host
+        if 53 in ports:
+            gateway_indicators = {53, 80, 1900, 67, 68}
+            if len(ports & gateway_indicators) < 2:
+                findings.append(
+                    Finding(
+                        severity="warning",
+                        title="DNS Resolver on Non-Gateway Host",
+                        description=(
+                            f"DNS (port 53) is open on {host} which does not appear to be the "
+                            "network gateway. This could be a misconfigured DNS service or "
+                            "an intentional Pi-hole/AdGuard setup."
+                        ),
+                        port=53,
+                        host=host,
+                        recommendation=(
+                            "Verify this DNS service is intentional. If running Pi-hole or "
+                            "AdGuard, ensure it's properly configured and updated."
+                        ),
+                    )
+                )
+
+        # Ephemeral port cluster
+        ephemeral = [p for p in ports if p >= 49152]
+        if len(ephemeral) > 3:
+            findings.append(
+                Finding(
+                    severity="info",
+                    title="Multiple Ephemeral Ports Open",
+                    description=(
+                        f"{host} has {len(ephemeral)} ephemeral ports open "
+                        f"({', '.join(str(p) for p in sorted(ephemeral)[:5])}). "
+                        "These are typically OS-assigned for active connections, but an unusual "
+                        "number may indicate persistent services or P2P activity."
+                    ),
+                    host=host,
+                    recommendation=(
+                        "Investigate with `lsof -i` or `netstat -tlnp` on the host to "
+                        "identify what processes are listening on these ports."
+                    ),
+                )
+            )
+
+    return findings
